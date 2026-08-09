@@ -1,0 +1,18 @@
+{
+  "bounds": [
+    [
+      41.33363,
+      -5.14026
+    ],
+    [
+      51.089,
+      9.55996
+    ]
+  ],
+  "bearing": 284.0,
+  "sunAltitude": 7.9,
+  "dateTime": "2026-08-12T20:19:00+02:00",
+  "source": "Mapzen Terrarium / AWS Open Data",
+  "resolution": "MNT Terrarium généralisé ; grille nationale ~2–4 km",
+  "scope": "Aperçu national du relief uniquement ; analyse plus précise, météo et obstacles recalculés au clic"
+}

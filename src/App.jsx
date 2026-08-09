@@ -2,16 +2,18 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, GeoJSON, ImageOverlay, Marker, Polygon, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import * as SunCalc from 'suncalc';
+import { CircularProgressbar, buildStyles } from 'react-circular-progressbar';
+import 'react-circular-progressbar/dist/styles.css';
 import {
   ArrowRight, Binoculars, Buildings, CalendarBlank, Car, CheckCircle, CloudSun,
   Compass, Crosshair, Info, MagnifyingGlass, MapPin, ShieldWarning,
-  Mountains, SlidersHorizontal, Sun, Tree, WarningCircle, Waves, X
+  GlobeHemisphereWest, List, Mountains, Sun, Tree, WarningCircle, Waves, X
 } from '@phosphor-icons/react';
 import 'leaflet/dist/leaflet.css';
 
 const ECLIPSE_DATE = '2026-08-12';
 const PUBLIC_BASE = import.meta.env.BASE_URL;
-const DEFAULT_POINT = { lat: 49.1458, lng: 1.7851 };
+const DEFAULT_POINT = { lat: 46.6034, lng: 1.8883 };
 const MAXIMUM_MINUTE = 20 * 60 + 19;
 
 function scoreColor(score) {
@@ -74,11 +76,11 @@ function ClickHandler({ onPick }) {
   return null;
 }
 
-function DepartmentView({ boundary, recenterKey }) {
+function FranceView({ boundary, recenterKey }) {
   const map = useMap();
   useEffect(() => {
     if (!boundary) return;
-    map.fitBounds(L.geoJSON(boundary).getBounds(), { padding: [72, 72], maxZoom: 11, animate: Boolean(recenterKey) });
+    map.fitBounds(L.geoJSON(boundary).getBounds(), { padding: [24, 24], maxZoom: 6, animate: Boolean(recenterKey) });
   }, [map, boundary, recenterKey]);
   return null;
 }
@@ -244,7 +246,7 @@ async function reversePlace(point) {
   const data = await response.json();
   const props = data.features?.[0]?.properties || {};
   const typeBonus = props.type === 'housenumber' || props.type === 'street' ? 18 : 8;
-  return { name: props.name || props.city || 'Point sélectionné', city: props.city || props.context || 'Val-d’Oise', postcode: props.postcode || '95', score: 62 + typeBonus };
+  return { name: props.name || props.city || 'Point sélectionné', city: props.city || props.context || 'France', postcode: props.postcode || '', score: 62 + typeBonus };
 }
 
 export function App() {
@@ -263,10 +265,10 @@ export function App() {
   const [hasSelection, setHasSelection] = useState(false);
   const [showVisibility, setShowVisibility] = useState(true);
   const [recenterKey, setRecenterKey] = useState(0);
-  const [departmentKey, setDepartmentKey] = useState(0);
+  const [franceKey, setFranceKey] = useState(0);
   const [safetyOpen, setSafetyOpen] = useState(true);
 
-  useEffect(() => { fetch(`${PUBLIC_BASE}data/val-doise.geojson`).then(r => r.json()).then(setBoundary); }, []);
+  useEffect(() => { fetch(`${PUBLIC_BASE}data/france-metropolitaine.geojson`).then(r => r.json()).then(setBoundary); }, []);
   const solar = useMemo(() => solarAt(point, time), [point, time]);
   const maximumSolar = useMemo(() => solarAt(point, '20:19'), [point]);
   const wedge = useMemo(() => makeWedge(point, solar.azimuth), [point, solar.azimuth]);
@@ -321,21 +323,18 @@ export function App() {
     if (!query.trim()) return;
     const url = `https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(query)}&limit=8`;
     const data = await fetch(url).then(r => r.json());
-    const feature = data.features?.find(item => String(item.properties?.postcode || '').startsWith('95') || String(item.properties?.context || '').includes("Val-d'Oise"));
+    const feature = data.features?.[0];
     if (feature) { setPoint({ lat: feature.geometry.coordinates[1], lng: feature.geometry.coordinates[0] }); setHasSelection(true); setPanelOpen(true); setRecenterKey(key=>key+1); }
-    else setError('Lieu introuvable dans le Val-d’Oise.');
+    else setError('Lieu introuvable en France.');
   };
 
   return (
     <div className="app-shell">
       <header className="masthead">
-        <div className="brand">
-          <img src={`${PUBLIC_BASE}assets/prefet-val-doise.svg`} alt="Préfet du Val-d’Oise" />
-          <span className="brand-rule" />
-          <span><small>ATLAS TERRITORIAL · VAL-D’OISE</small><strong>Où voir l’éclipse ?</strong><em>Éclipse solaire · mercredi 12 août 2026</em></span>
-        </div>
+        <a className="brand" href="/" aria-label="CartoKob, accueil"><GlobeHemisphereWest size={29} weight="regular" /><strong>CartoKob</strong></a>
+        <div className="event-title"><strong>Où voir l’éclipse ?</strong><span>12 août 2026</span></div>
         <div className="event-summary"><Sun size={20} weight="fill" /><span><strong>Maximum vers 20:19</strong><small>Soleil bas · direction 284°</small></span></div>
-        <nav><button>Sources & méthode</button></nav>
+        <nav><button onClick={() => setSafetyOpen(true)} aria-label="Informations et sécurité"><Info size={23}/></button><button aria-label="Menu"><List size={25}/></button></nav>
       </header>
 
       {safetyOpen && <div className="safety-modal-backdrop">
@@ -352,14 +351,14 @@ export function App() {
 
       <main className={`workspace ${panelOpen ? '' : 'panel-closed'}`}>
         <aside className="controls">
-          <div className="section-kicker">LECTURE CARTOGRAPHIQUE</div>
+          <div className="section-kicker">CARTE NATIONALE</div>
           <h1>Trouvez votre point d’observation</h1>
-          <p>Cliquez n’importe où sur la carte : le score combine le relief, la météo et l’heure d’observation.</p>
+          <p>Cliquez n’importe où en France : le score combine le relief, la météo et l’heure d’observation.</p>
           <form onSubmit={onSearch} className="search-form">
             <label htmlFor="place-search">Adresse ou commune</label>
-            <div><MagnifyingGlass size={18} /><input id="place-search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Ex. L’Isle-Adam" /><button aria-label="Rechercher"><ArrowRight size={18} /></button></div>
+            <div><MagnifyingGlass size={18} /><input id="place-search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Commune ou adresse" /><button aria-label="Rechercher"><ArrowRight size={18} /></button></div>
           </form>
-          <div className="quick-actions"><button onClick={() => { setPanelOpen(false); setHasSelection(false); setDepartmentKey(key=>key+1); }}>Recentrer</button><button onClick={() => navigator.geolocation?.getCurrentPosition(p => { setPoint({lat:p.coords.latitude,lng:p.coords.longitude}); setHasSelection(true); setPanelOpen(true); setRecenterKey(key=>key+1); })}><Crosshair size={18} /> Me localiser</button></div>
+          <div className="quick-actions"><button onClick={() => { setPanelOpen(false); setHasSelection(false); setFranceKey(key=>key+1); }}>France entière</button><button onClick={() => navigator.geolocation?.getCurrentPosition(p => { setPoint({lat:p.coords.latitude,lng:p.coords.longitude}); setHasSelection(true); setPanelOpen(true); setRecenterKey(key=>key+1); })}><Crosshair size={18} /> Me localiser</button></div>
 
           <div className="control-block">
             <div className="block-title"><CalendarBlank size={18} /><span>Heure d’observation</span><strong>{time}</strong></div>
@@ -375,28 +374,34 @@ export function App() {
             <div><i className="green" /><span><strong>Dégagé</strong> Soleil au-dessus du relief</span></div>
             <div><i className="orange" /><span><strong>Limite</strong> Faible marge à l’horizon</span></div>
             <div><i className="red" /><span><strong>Masqué</strong> Relief devant le Soleil</span></div>
-            <small>Cette couche est calculée à l’avance avec un modèle de terrain ~30 m. La météo complète le score ; les obstacles cartographiés peuvent être signalés sans bloquer le calcul.</small>
+            <small>Cette vue nationale est une lecture généralisée du relief. Au clic, le relief et la météo sont recalculés précisément pour le lieu choisi.</small>
           </div>
         </aside>
 
-        <section className="map-wrap" aria-label="Carte interactive du Val-d’Oise">
-          <MapContainer center={[49.08, 2.02]} zoom={10} minZoom={9} maxZoom={17} zoomControl>
+        <section className="map-wrap" aria-label="Carte interactive de la France">
+          <MapContainer center={[46.6034, 1.8883]} zoom={6} minZoom={5} maxZoom={17} zoomControl>
             <TileLayer attribution='© OpenStreetMap' opacity={0.62} url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-            {showVisibility && <ImageOverlay url={`${PUBLIC_BASE}data/visibility-relief-2026-08-12.png`} bounds={[[48.908625,1.608748],[49.241488,2.595002]]} opacity={0.72} interactive={false} />}
+            {showVisibility && <ImageOverlay url={`${PUBLIC_BASE}data/visibility-france-2026-08-12.png`} bounds={[[41.33363,-5.14026],[51.089,9.55996]]} opacity={0.68} interactive={false} />}
             {boundary && <GeoJSON data={boundary} style={{ color:'#070047', weight:2.2, fillColor:'#fff', fillOpacity:.05 }} />}
             {hasSelection && <Polygon positions={wedge} pathOptions={{color:'#000091',weight:2,fillColor:'#4fd1ff',fillOpacity:.22,dashArray:'7 6'}} />}
             {hasSelection && <Marker position={[point.lat, point.lng]} icon={L.divIcon({className:'score-marker',html:`<span class="${loading?'marker-loading':''}" style="--marker:${loading?'#5f6b7a':displayColor}"><b>${loading?'':decisiveTerrainBlock?'!':isComplete?total:'?'}</b></span>`,iconSize:[48,48],iconAnchor:[24,48]})} />}
             <ClickHandler onPick={(latlng) => { setPoint({lat:latlng.lat,lng:latlng.lng}); setHasSelection(true); setPanelOpen(true); setRecenterKey(key=>key+1); }} />
-            <DepartmentView boundary={boundary} recenterKey={departmentKey} />
+            <FranceView boundary={boundary} recenterKey={franceKey} />
             <MapUpdater point={point} recenterKey={recenterKey} />
           </MapContainer>
-          <div className="map-instruction"><MapPin size={18} weight="fill" /><span><strong>Cliquez sur la carte</strong> pour analyser ce lieu</span></div>
+          <form onSubmit={onSearch} className="mobile-search"><MagnifyingGlass size={19}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Rechercher un lieu" aria-label="Rechercher un lieu"/><button aria-label="Lancer la recherche"><ArrowRight size={18}/></button></form>
+          <div className="map-instruction"><MapPin size={18} weight="fill" /><span><strong>Touchez la carte</strong> pour analyser ce lieu</span></div>
           <div className="surface-chip"><Mountains size={18}/><span>Couleur initiale = <strong>relief uniquement</strong></span></div>
-          <div className="direction-chip"><Compass size={20} /><span>Regarder vers <strong>{Math.round(solar.azimuth)}°</strong> · ouest-nord-ouest</span></div>
+          <div className="direction-chip"><Compass size={20} /><span><strong>{Math.round(solar.azimuth)}°</strong> · ouest-nord-ouest</span><b>{time}</b></div>
         </section>
 
         {panelOpen && hasSelection && <aside className="details" aria-live="polite" aria-busy={loading}>
+          <div className="sheet-handle" aria-hidden="true" />
           <button className="close" onClick={() => setPanelOpen(false)} aria-label="Fermer"><X size={20} /></button>
+          <div className="mobile-score-hero" style={{'--score-color':displayColor}}>
+            <div className="score-gauge"><CircularProgressbar value={loading ? 18 : decisiveTerrainBlock ? 0 : total} text={loading ? '…' : decisiveTerrainBlock ? '!' : `${total}`} styles={buildStyles({pathColor:displayColor,textColor:'#fff',trailColor:'rgba(255,255,255,.18)',textSize:'30px',strokeLinecap:'round'})}/></div>
+            <div><strong>{loading ? 'Analyse en cours…' : resultLabel}</strong><span><ArrowRight size={28} weight="bold" /> {Math.round(solar.azimuth)}°</span><small>ouest-nord-ouest</small></div>
+          </div>
           <div className="section-kicker">LIEU SÉLECTIONNÉ</div>
           <h2>{place?.name || 'Point sélectionné'}</h2><p className="place-subtitle">{place ? `${place.postcode} · ${place.city}` : `${point.lat.toFixed(5)}° N · ${point.lng.toFixed(5)}° E`}</p>
           <div className="details-safety"><ShieldWarning size={18} weight="fill" /><span><strong>Observation protégée uniquement.</strong> Lunettes certifiées ISO 12312-2 obligatoires.</span></div>
@@ -438,7 +443,7 @@ export function App() {
         </aside>}
         {hasSelection && !panelOpen && <button className="reopen" onClick={() => setPanelOpen(true)}>Voir le résultat <ArrowRight size={18}/></button>}
       </main>
-      <footer><span>DDT 95 · Pôle géomatique</span><span>Données : IGN · Open-Meteo · Base Adresse Nationale · OpenStreetMap</span></footer>
+      <footer><span><GlobeHemisphereWest size={14}/> CartoKob</span><span>Données : Open-Meteo · Base Adresse Nationale · OpenStreetMap · Mapzen</span></footer>
     </div>
   );
 }
