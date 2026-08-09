@@ -14,7 +14,7 @@ import 'leaflet/dist/leaflet.css';
 const ECLIPSE_DATE = '2026-08-12';
 const PUBLIC_BASE = import.meta.env.BASE_URL;
 const IS_DDT_BUILD = import.meta.env.IS_DDT_BUILD;
-const DEFAULT_POINT = { lat: 46.6034, lng: 1.8883 };
+const DEFAULT_POINT = IS_DDT_BUILD ? { lat: 49.08, lng: 2.02 } : { lat: 46.6034, lng: 1.8883 };
 const MAXIMUM_MINUTE = 20 * 60 + 19;
 
 function scoreColor(score) {
@@ -110,7 +110,7 @@ function FranceView({ boundary, recenterKey }) {
       map.fitBounds(bounds, {
         paddingTopLeft: [28, 28],
         paddingBottomRight: [28, 42],
-        maxZoom: 6,
+        maxZoom: IS_DDT_BUILD ? 11 : 6,
         animate: Boolean(recenterKey)
       });
     };
@@ -382,7 +382,10 @@ export function App() {
   const [safetyOpen, setSafetyOpen] = useState(true);
   const [locating, setLocating] = useState(false);
 
-  useEffect(() => { fetch(`${PUBLIC_BASE}data/france-metropolitaine.geojson`).then(r => r.json()).then(setBoundary); }, []);
+  useEffect(() => {
+    const boundaryFile = IS_DDT_BUILD ? 'val-doise.geojson' : 'france-metropolitaine.geojson';
+    fetch(`${PUBLIC_BASE}data/${boundaryFile}`).then(r => r.json()).then(setBoundary);
+  }, []);
   const solar = useMemo(() => solarAt(point, time), [point, time]);
   const maximumSolar = useMemo(() => solarAt(point, '20:19'), [point]);
   const wedge = useMemo(() => makeWedge(point, solar.azimuth), [point, solar.azimuth]);
@@ -439,9 +442,11 @@ export function App() {
     if (!query.trim()) return;
     const url = `https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(query)}&limit=8`;
     const data = await fetch(url).then(r => r.json());
-    const feature = data.features?.[0];
+    const feature = IS_DDT_BUILD
+      ? data.features?.find(item => String(item.properties?.postcode || '').startsWith('95') || String(item.properties?.context || '').includes("Val-d'Oise"))
+      : data.features?.[0];
     if (feature) { setPoint({ lat: feature.geometry.coordinates[1], lng: feature.geometry.coordinates[0] }); setHasSelection(true); setPanelOpen(true); setRecenterKey(key=>key+1); }
-    else setError('Lieu introuvable en France.');
+    else setError(IS_DDT_BUILD ? 'Lieu introuvable dans le Val-d’Oise.' : 'Lieu introuvable en France.');
   };
 
   const resetSearch = () => {
@@ -499,14 +504,14 @@ export function App() {
 
       <main className={`workspace ${panelOpen ? '' : 'panel-closed'}`}>
         <aside className="controls">
-          <div className="section-kicker">CARTE NATIONALE</div>
+          <div className="section-kicker">{IS_DDT_BUILD ? 'LECTURE CARTOGRAPHIQUE' : 'CARTE NATIONALE'}</div>
           <h1>Trouvez votre point d’observation</h1>
-          <p>Cliquez n’importe où en France : le score combine le relief, la météo et l’heure d’observation.</p>
+          <p>{IS_DDT_BUILD ? 'Cliquez n’importe où dans le Val-d’Oise : le score combine le relief, la météo et l’heure d’observation.' : 'Cliquez n’importe où en France : le score combine le relief, la météo et l’heure d’observation.'}</p>
           <form onSubmit={onSearch} className="search-form">
             <label htmlFor="place-search">Adresse ou commune</label>
             <div><MagnifyingGlass size={18} /><input id="place-search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Commune ou adresse" /><button aria-label="Rechercher"><ArrowRight size={18} /></button></div>
           </form>
-          <div className="quick-actions"><button onClick={() => { setPanelOpen(false); setHasSelection(false); setFranceKey(key=>key+1); }}>France entière</button><button onClick={locateUser} disabled={locating}><Crosshair size={18} className={locating?'locating-icon':''} /> {locating?'Localisation…':'Me localiser'}</button></div>
+          <div className="quick-actions"><button onClick={() => { setPanelOpen(false); setHasSelection(false); setFranceKey(key=>key+1); }}>{IS_DDT_BUILD ? 'Recentrer le Val-d’Oise' : 'France entière'}</button><button onClick={locateUser} disabled={locating}><Crosshair size={18} className={locating?'locating-icon':''} /> {locating?'Localisation…':'Me localiser'}</button></div>
 
           <div className="control-block">
             <div className="block-title"><CalendarBlank size={18} /><span>Heure d’observation</span><strong>{time}</strong></div>
@@ -526,10 +531,12 @@ export function App() {
           </div>
         </aside>
 
-        <section className="map-wrap" aria-label="Carte interactive de la France">
-          <MapContainer center={[46.6034, 1.8883]} zoom={6} minZoom={5} maxZoom={17} zoomControl>
+        <section className="map-wrap" aria-label={IS_DDT_BUILD ? 'Carte interactive du Val-d’Oise' : 'Carte interactive de la France'}>
+          <MapContainer center={IS_DDT_BUILD ? [49.08, 2.02] : [46.6034, 1.8883]} zoom={IS_DDT_BUILD ? 10 : 6} minZoom={IS_DDT_BUILD ? 9 : 5} maxZoom={17} zoomControl>
             <TileLayer attribution='© OpenStreetMap' opacity={0.62} url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-            {showVisibility && <ImageOverlay url={`${PUBLIC_BASE}data/visibility-france-2026-08-12.png`} bounds={[[41.33363,-5.14026],[51.089,9.55996]]} opacity={0.68} interactive={false} />}
+            {showVisibility && (IS_DDT_BUILD
+              ? <ImageOverlay url={`${PUBLIC_BASE}data/visibility-relief-2026-08-12.png`} bounds={[[48.908625,1.608748],[49.241488,2.595002]]} opacity={0.72} interactive={false} />
+              : <ImageOverlay url={`${PUBLIC_BASE}data/visibility-france-2026-08-12.png`} bounds={[[41.33363,-5.14026],[51.089,9.55996]]} opacity={0.68} interactive={false} />)}
             {boundary && <GeoJSON data={boundary} style={{ color:'#070047', weight:2.2, fillColor:'#fff', fillOpacity:.05 }} />}
             {hasSelection && <Polygon positions={wedge} pathOptions={{color:'#000091',weight:2,fillColor:'#4fd1ff',fillOpacity:.22,dashArray:'7 6'}} />}
             {hasSelection && <Marker position={[point.lat, point.lng]} icon={L.divIcon({className:'score-marker',html:`<span class="${loading?'marker-loading':''}" style="--marker:${loading?'#5f6b7a':displayColor}"><b>${loading?'':decisiveTerrainBlock?'!':isComplete?total:'?'}</b></span>`,iconSize:[48,48],iconAnchor:[24,48]})} />}

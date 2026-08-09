@@ -1,0 +1,18 @@
+{
+  "bounds": [
+    [
+      48.908625,
+      1.608748
+    ],
+    [
+      49.241488,
+      2.595002
+    ]
+  ],
+  "bearing": 284.0,
+  "sunAltitude": 7.9,
+  "dateTime": "2026-08-12T20:19:00+02:00",
+  "source": "Mapzen Terrarium / AWS Open Data",
+  "resolution": "~30 m DEM; grille de restitution ~250–350 m",
+  "scope": "Relief uniquement; bâtiments et végétation vérifiés au clic"
+}
