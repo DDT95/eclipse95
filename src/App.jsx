@@ -409,14 +409,15 @@ export function App() {
           <div className="direction-chip"><Compass size={20} /><span><strong>{Math.round(solar.azimuth)}°</strong> · ouest-nord-ouest</span><b>{time}</b></div>
         </section>
 
+        {panelOpen && hasSelection && <button className="reset-map-button" onClick={resetSearch}><MagnifyingGlass size={17}/> Nouvelle recherche</button>}
         {panelOpen && hasSelection && <aside className="details" aria-live="polite" aria-busy={loading}>
           <div className="sheet-handle" aria-hidden="true" />
           <button className="close" onClick={() => setPanelOpen(false)} aria-label="Fermer"><X size={20} /></button>
+          <div className="details-scroll">
           <div className="mobile-score-hero" style={{'--score-color':displayColor}}>
-            <div className="score-gauge"><CircularProgressbar value={loading ? 18 : decisiveTerrainBlock ? 0 : total} styles={buildStyles({pathColor:displayColor,trailColor:'rgba(255,255,255,.18)',strokeLinecap:'round'})}/></div>
+            <div className="score-gauge"><CircularProgressbar value={loading ? 18 : decisiveTerrainBlock ? 0 : total} text={loading ? '…' : decisiveTerrainBlock ? '!' : `${total}`} styles={buildStyles({pathColor:displayColor,textColor:'#071d57',trailColor:'#dfe5ee',textSize:'28px',strokeLinecap:'round'})}/></div>
             <div><b>{loading ? '…' : decisiveTerrainBlock ? '!' : total}</b><strong>{loading ? 'Analyse…' : resultLabel}</strong><span><ArrowRight size={25} weight="bold" /> {Math.round(solar.azimuth)}°</span><small>ouest-nord-ouest</small></div>
           </div>
-          <div className="details-scroll">
           <div className="mobile-factor-summary">
             <div><Mountains size={23}/><span>Marge d’horizon</span><strong>{horizon ? `${clearance.toFixed(1)}°` : '…'}</strong></div>
             <div><CloudSun size={23}/><span>Météo prévue</span><strong>{weather ? `${weatherScore}%` : '…'}</strong></div>

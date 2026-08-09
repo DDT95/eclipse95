@@ -55,6 +55,7 @@ footer{display:flex;align-items:center;justify-content:space-between;padding:0 1
 .mobile-search{display:none}.mobile-score-hero,.mobile-factor-summary{display:none}.sheet-handle{display:none}footer span:first-child{display:flex;align-items:center;gap:5px;color:var(--deep)}
 .details-scroll{display:contents}
 .new-search{width:100%;min-height:42px;margin:2px 0 14px;border:1px solid #c8d2e4;border-radius:13px;background:#fff;color:var(--deep);display:flex;align-items:center;justify-content:center;gap:8px;font-size:12px;font-weight:700}
+.reset-map-button{display:none}
 .route-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.route-actions .route-button{min-width:0;padding:10px 6px;white-space:nowrap}.route-button-secondary{background:#fff;color:var(--deep);border:1px solid #c8d2e4}
 
 @media(max-width:720px){
@@ -70,3 +71,34 @@ footer{display:flex;align-items:center;justify-content:space-between;padding:0 1
 }
 
 @media(max-width:390px){.brand{border:0;padding-right:2px}.brand strong{font-size:12px}.event-title strong{font-size:15px}.event-title span{font-size:9px}.masthead nav button{padding-right:0}.details{height:min(39dvh,340px)}.mobile-score-hero{width:184px;height:184px;top:-98px}.mobile-score-hero>div:last-child{inset:28px 18px 18px}.mobile-score-hero b{font-size:38px}.mobile-score-hero span{font-size:23px}}
+
+/* Panneau mobile lisible : structure inspirée des applications cartographiques */
+@media(max-width:720px){
+ .details{height:min(52dvh,470px);padding:0;background:#fff;color:var(--deep);overflow:hidden;border-radius:22px 22px 0 0}
+ .details-scroll{position:absolute;inset:0;display:block;padding:24px 16px 28px;overflow:auto;border-radius:inherit;background:#fff}
+ .sheet-handle{top:8px;background:#aeb8c8}
+ .close{top:12px;right:12px;width:38px;height:38px;background:#eef2f6;color:var(--deep)}
+ .mobile-score-hero{position:relative;top:auto;left:auto;width:auto;height:auto;transform:none;display:grid;grid-template-columns:72px minmax(0,1fr);align-items:center;gap:14px;margin:8px 46px 14px 0;padding:0;border:0;border-radius:0;background:#fff;color:var(--deep);box-shadow:none}
+ .score-gauge{position:relative;inset:auto;width:72px;height:72px}
+ .mobile-score-hero>div:last-child{position:static;inset:auto;display:grid;grid-template-columns:auto 1fr;grid-template-areas:'number verdict' 'direction direction' 'cardinal cardinal';align-items:center;gap:2px 10px;text-align:left}
+ .mobile-score-hero b{display:none}
+ .mobile-score-hero strong{grid-area:verdict;max-width:none;margin:0;font-size:16px;line-height:1.15;color:var(--score-color)}
+ .mobile-score-hero span{grid-area:direction;display:flex;margin:4px 0 0;font-size:18px;color:var(--deep)}
+ .mobile-score-hero span svg{color:var(--score-color)}
+ .mobile-score-hero small{grid-area:cardinal;margin-left:29px;font-size:11px;color:#68758a}
+ .mobile-factor-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:0 0 12px;padding:11px 4px;border:1px solid #dce4e8;border-radius:14px;background:#f7f9fc}
+ .mobile-factor-summary>div{padding:2px 5px;border-color:#dce4e8}
+ .mobile-factor-summary svg{width:20px;height:20px;color:var(--deep)}
+ .mobile-factor-summary span{font-size:9px;color:#68758a}
+ .mobile-factor-summary strong{font-size:16px;color:var(--deep)}
+ .new-search{display:none}.reset-map-button{display:flex;position:absolute;z-index:950;right:14px;bottom:calc(min(52dvh,470px) + 18px);align-items:center;gap:7px;min-height:40px;padding:8px 13px;border:1px solid #dce4e8;border-radius:999px;background:#fff;color:var(--deep);box-shadow:0 7px 22px rgba(7,29,87,.18);font-size:11px;font-weight:700}
+ .details-scroll>.section-kicker,.details-scroll>h2,.details-scroll>.place-subtitle,.details-scroll>.confidence-line,.details-scroll>.score-card{display:none}
+ .details-safety{margin:0 0 10px;padding:8px 10px;border-radius:10px;background:#fff4f4;color:#8a2020}
+ .details .coordinates{color:#68758a;border-color:#dce4e8}
+ .details .detail-section{border-color:#dce4e8}
+ .details .detail-heading strong,.details .sun-line strong,.details .section-row h3,.details .factor-row strong{color:var(--deep)}
+ .details .detail-heading small,.details .sun-line p,.details .section-row span,.details .factor-row p{color:#68758a}
+ .details .method-note{background:#f4f7fb;color:#68758a}
+ .details .photo-button{color:var(--blue)}
+ .route-actions{grid-template-columns:1fr}.route-actions .route-button{min-height:44px}
+}
