@@ -7,7 +7,7 @@ import 'react-circular-progressbar/dist/styles.css';
 import {
   ArrowRight, Binoculars, Buildings, CalendarBlank, Car, CheckCircle, CloudSun,
   Compass, Crosshair, Info, MagnifyingGlass, MapPin, ShieldWarning,
-  GlobeHemisphereWest, List, Mountains, Sun, Tree, WarningCircle, Waves, X
+  GlobeHemisphereWest, Mountains, Sun, Tree, WarningCircle, Waves, X
 } from '@phosphor-icons/react';
 import 'leaflet/dist/leaflet.css';
 
@@ -348,7 +348,7 @@ export function App() {
         <a className="brand" href="/" aria-label="CartoKob, accueil"><GlobeHemisphereWest size={29} weight="regular" /><strong>CartoKob</strong></a>
         <div className="event-title"><strong>Où voir l’éclipse ?</strong><span>12 août 2026</span></div>
         <div className="event-summary"><Sun size={20} weight="fill" /><span><strong>Maximum vers 20:19</strong><small>Soleil bas · direction 284°</small></span></div>
-        <nav><button onClick={() => setSafetyOpen(true)} aria-label="Informations et sécurité"><Info size={23}/></button><button aria-label="Menu"><List size={25}/></button></nav>
+        <nav><button onClick={() => setSafetyOpen(true)} aria-label="Informations et sécurité"><Info size={22}/><span>Précautions</span></button></nav>
       </header>
 
       {safetyOpen && <div className="safety-modal-backdrop">
@@ -413,8 +413,14 @@ export function App() {
           <div className="sheet-handle" aria-hidden="true" />
           <button className="close" onClick={() => setPanelOpen(false)} aria-label="Fermer"><X size={20} /></button>
           <div className="mobile-score-hero" style={{'--score-color':displayColor}}>
-            <div className="score-gauge"><CircularProgressbar value={loading ? 18 : decisiveTerrainBlock ? 0 : total} text={loading ? '…' : decisiveTerrainBlock ? '!' : `${total}`} styles={buildStyles({pathColor:displayColor,textColor:'#fff',trailColor:'rgba(255,255,255,.18)',textSize:'30px',strokeLinecap:'round'})}/></div>
-            <div><strong>{loading ? 'Analyse en cours…' : resultLabel}</strong><span><ArrowRight size={28} weight="bold" /> {Math.round(solar.azimuth)}°</span><small>ouest-nord-ouest</small></div>
+            <div className="score-gauge"><CircularProgressbar value={loading ? 18 : decisiveTerrainBlock ? 0 : total} styles={buildStyles({pathColor:displayColor,trailColor:'rgba(255,255,255,.18)',strokeLinecap:'round'})}/></div>
+            <div><b>{loading ? '…' : decisiveTerrainBlock ? '!' : total}</b><strong>{loading ? 'Analyse…' : resultLabel}</strong><span><ArrowRight size={25} weight="bold" /> {Math.round(solar.azimuth)}°</span><small>ouest-nord-ouest</small></div>
+          </div>
+          <div className="details-scroll">
+          <div className="mobile-factor-summary">
+            <div><Mountains size={23}/><span>Marge d’horizon</span><strong>{horizon ? `${clearance.toFixed(1)}°` : '…'}</strong></div>
+            <div><CloudSun size={23}/><span>Météo prévue</span><strong>{weather ? `${weatherScore}%` : '…'}</strong></div>
+            <div><CalendarBlank size={23}/><span>Heure optimale</span><strong>20:19</strong></div>
           </div>
           <button className="new-search" onClick={resetSearch}><MagnifyingGlass size={18}/> Nouvelle recherche</button>
           <div className="section-kicker">LIEU SÉLECTIONNÉ</div>
@@ -453,8 +459,13 @@ export function App() {
           </section>}
 
           <div className="method-note"><Info size={18} /><p><strong>Le pourcentage est une aide à la décision.</strong> Il combine relief, météo et heure. Vérifiez toujours les conditions réelles sur place et respectez les accès autorisés.</p></div>
-          <a className="route-button" href={`https://www.openstreetmap.org/directions?to=${point.lat},${point.lng}`} target="_blank" rel="noreferrer"><Car size={19} /> Préparer l’itinéraire</a>
+          <div className="route-actions" aria-label="Préparer l’itinéraire">
+            <a className="route-button" href={`https://www.google.com/maps/dir/?api=1&destination=${point.lat},${point.lng}`} target="_blank" rel="noreferrer"><Car size={19} /> Google Maps</a>
+            <a className="route-button route-button-secondary" href={`https://maps.apple.com/?daddr=${point.lat},${point.lng}&dirflg=d`} target="_blank" rel="noreferrer"><MapPin size={19} /> Plans Apple</a>
+            <a className="route-button route-button-secondary" href={`https://www.waze.com/live-map/directions?navigate=yes&to=ll.${point.lat}%2C${point.lng}`} target="_blank" rel="noreferrer"><Compass size={19} /> Waze</a>
+          </div>
           <a className="photo-button" href={`https://www.mapillary.com/app/?lat=${point.lat}&lng=${point.lng}&z=17`} target="_blank" rel="noreferrer">Voir les photos disponibles sur Mapillary ↗</a>
+          </div>
         </aside>}
         {hasSelection && !panelOpen && <button className="reopen" onClick={() => setPanelOpen(true)}>Voir le résultat <ArrowRight size={18}/></button>}
       </main>
