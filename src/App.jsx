@@ -328,6 +328,20 @@ export function App() {
     else setError('Lieu introuvable en France.');
   };
 
+  const resetSearch = () => {
+    setPanelOpen(false);
+    setHasSelection(false);
+    setQuery('');
+    setError('');
+    setPlace(null);
+    setWeather(null);
+    setHorizon(null);
+    setMaximumHorizon(null);
+    setSiteAudit(null);
+    setPoint(DEFAULT_POINT);
+    setFranceKey(key => key + 1);
+  };
+
   return (
     <div className="app-shell">
       <header className="masthead">
@@ -402,6 +416,7 @@ export function App() {
             <div className="score-gauge"><CircularProgressbar value={loading ? 18 : decisiveTerrainBlock ? 0 : total} text={loading ? '…' : decisiveTerrainBlock ? '!' : `${total}`} styles={buildStyles({pathColor:displayColor,textColor:'#fff',trailColor:'rgba(255,255,255,.18)',textSize:'30px',strokeLinecap:'round'})}/></div>
             <div><strong>{loading ? 'Analyse en cours…' : resultLabel}</strong><span><ArrowRight size={28} weight="bold" /> {Math.round(solar.azimuth)}°</span><small>ouest-nord-ouest</small></div>
           </div>
+          <button className="new-search" onClick={resetSearch}><MagnifyingGlass size={18}/> Nouvelle recherche</button>
           <div className="section-kicker">LIEU SÉLECTIONNÉ</div>
           <h2>{place?.name || 'Point sélectionné'}</h2><p className="place-subtitle">{place ? `${place.postcode} · ${place.city}` : `${point.lat.toFixed(5)}° N · ${point.lng.toFixed(5)}° E`}</p>
           <div className="details-safety"><ShieldWarning size={18} weight="fill" /><span><strong>Observation protégée uniquement.</strong> Lunettes certifiées ISO 12312-2 obligatoires.</span></div>
