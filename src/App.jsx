@@ -262,12 +262,28 @@ async function fetchSiteAudit(point, bearing) {
       return await response.json();
     } finally { clearTimeout(timer); }
   };
-  const [osmResult, ignResult] = await Promise.allSettled([fetchOverpass(query), fetchIgnBuildings()]);
-  if (osmResult.status === 'rejected' && ignResult.status === 'rejected') throw new Error('Contrôle du bâti indisponible');
+  const fetchIgnVegetation = async () => {
+    const samples = [0, .03, .07, .15, .3, .55];
+    return Promise.all(samples.map(async distanceKm => {
+      const [lat,lng] = distanceKm ? destination(point.lat,point.lng,distanceKm,bearing) : [point.lat,point.lng];
+      const latDelta = 14 / 111320;
+      const lngDelta = latDelta / Math.max(.45,Math.cos(lat*Math.PI/180));
+      const url = new URL('https://data.geopf.fr/wfs/ows');
+      url.search = new URLSearchParams({service:'WFS',version:'2.0.0',request:'GetFeature',typeNames:'BDTOPO_V3:zone_de_vegetation',srsName:'EPSG:4326',outputFormat:'application/json',count:'20',propertyName:'nature',bbox:`${lng-lngDelta},${lat-latDelta},${lng+lngDelta},${lat+latDelta},EPSG:4326`});
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Végétation IGN indisponible');
+      const data = await response.json();
+      return {distance:distanceKm*1000,natures:(data.features||[]).map(f=>f.properties?.nature).filter(Boolean)};
+    }));
+  };
+  const [osmResult, ignResult, vegetationResult] = await Promise.allSettled([fetchOverpass(query), fetchIgnBuildings(), fetchIgnVegetation()]);
+  if (osmResult.status === 'rejected' && ignResult.status === 'rejected' && vegetationResult.status === 'rejected') throw new Error('Contrôle du lieu indisponible');
   const data = osmResult.status === 'fulfilled' ? osmResult.value : {elements:[]};
   const elements = data.elements || [];
   const onWater = elements.some(el => el.tags?.natural === 'water' || el.tags?.waterway || el.tags?.landuse === 'reservoir');
-  const forestNearby = elements.some(el => el.tags?.natural === 'wood' || el.tags?.landuse === 'forest');
+  const ignVegetation = vegetationResult.status === 'fulfilled' ? vegetationResult.value : [];
+  const forestNatures = ['Bois','Forêt fermée','Forêt ouverte','Peupleraie'];
+  const forestNearby = elements.some(el => el.tags?.natural === 'wood' || el.tags?.landuse === 'forest') || ignVegetation[0]?.natures?.some(n=>forestNatures.includes(n));
   const treesNearby = elements.filter(el => el.tags?.natural === 'tree' || el.tags?.barrier === 'hedge').length;
   const osmInBuilding = elements.some(el => el.tags?.building && (() => { const p=el.center?{lat:el.center.lat,lng:el.center.lon}:null; return !p || distanceMetres(point,p)<15; })());
   const privateNearby = elements.some(el => el.tags?.access === 'private');
@@ -301,6 +317,11 @@ async function fetchSiteAudit(point, bearing) {
   }).filter(Boolean).filter(o => o.distance <= 700) : [];
   const axisBuildings = ignBuildings.filter(o => o.inAxis && o.distance > 10);
   obstacles.push(...axisBuildings);
+  const vegetationHeights = {'Bois':15,'Forêt fermée':15,'Forêt ouverte':12,'Peupleraie':18,'Haie':5,'Lande ligneuse':3,'Verger':6};
+  ignVegetation.slice(1).forEach(sample => sample.natures.forEach(nature => {
+    const height = vegetationHeights[nature] || 2;
+    obstacles.push({kind:`Végétation IGN · ${nature}`,source:'IGN BD TOPO',distance:Math.max(12,sample.distance),height,angle:Math.atan2(height-1.7,Math.max(12,sample.distance))*180/Math.PI});
+  }));
   const maxObstacle = obstacles.sort((a,b) => b.angle-a.angle)[0] || null;
   const nearbyIgnBuildings = ignBuildings.filter(o => o.distance <= 180);
   const nearbyOsmBuildings = elements.filter(el => el.tags?.building && el.center && distanceMetres(point,{lat:el.center.lat,lng:el.center.lon}) <= 180).length;
@@ -309,7 +330,7 @@ async function fetchSiteAudit(point, bearing) {
   const urbanPenalty = nearbyBuildingCount ? Math.min(18, 4 + Math.round(Math.sqrt(nearbyBuildingCount) * 2.2)) : 0;
   const buildingScore = Math.max(0, 100 - urbanPenalty - (maxObstacle?.kind?.includes('Bâtiment') ? Math.min(65, Math.round(maxObstacle.angle * 5)) : 0));
   const accessScore = Math.min(100, 35 + (hasRoad?30:0) + (hasParking?20:0) + (hasTransit?15:0));
-  return { onWater, inBuilding, forestNearby, treesNearby, privateNearby, excluded:onWater||inBuilding, hasRoad, hasParking, hasTransit, obstacles, maxObstacle, nearbyBuildingCount, urbanPenalty, buildingScore, buildingSource:ignResult.status === 'fulfilled' ? 'IGN BD TOPO' : 'OpenStreetMap', score:accessScore, timestamp:data.osm3s?.timestamp_osm_base };
+  return { onWater, inBuilding, forestNearby, treesNearby, privateNearby, excluded:onWater||inBuilding, hasRoad, hasParking, hasTransit, obstacles, maxObstacle, nearbyBuildingCount, urbanPenalty, buildingScore, vegetationSource:vegetationResult.status === 'fulfilled'?'IGN BD TOPO':'OpenStreetMap', buildingSource:ignResult.status === 'fulfilled' ? 'IGN BD TOPO' : 'OpenStreetMap', score:accessScore, timestamp:data.osm3s?.timestamp_osm_base };
 }
 
 async function reversePlace(point) {
