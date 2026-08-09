@@ -8,7 +8,7 @@ When implementing from a selected generated mock, treat that image as the source
 
 ## Durable product direction
 
-- CartoKob is a personal, independent cartography brand. Never display Préfet, DDT95, or Atlas territorial branding in this app.
+- CartoKob is a personal, independent cartography brand. Never display institutional branding in this app.
 - The logo is a minimal round globe followed by the wordmark “CartoKob”.
 - The primary experience is mobile-first and map-first: the map stays central, controls remain reachable by thumb, and results open in a bottom sheet.
 - The geographic scope is metropolitan France, with a national overview layer and precise analysis at any selected point.

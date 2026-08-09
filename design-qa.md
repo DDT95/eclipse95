@@ -14,7 +14,7 @@
 - Fonts and typography: Marianne is close in character and weight to the source; hierarchy and small-label legibility are preserved.
 - Spacing and layout rhythm: the national map remains the dominant surface. The sheet was reduced after the first comparison so it no longer consumes most of the mobile viewport.
 - Colors and tokens: navy, white and semantic green/orange/red match the source intent with sufficient contrast.
-- Image and asset fidelity: the live OpenStreetMap basemap and generated national relief raster replace the Val-d'Oise-only mock content intentionally. UI icons come from Phosphor; the circular score comes from the progress component rather than handcrafted art.
+- Image and asset fidelity: the live OpenStreetMap basemap and generated national relief raster replace the local mock content intentionally. UI icons come from Phosphor; the circular score comes from the progress component rather than handcrafted art.
 - Copy and content: the event date, 20:19 maximum, viewing bearing, percentage, horizon, weather and safety language are present. Geographic wording is updated to metropolitan France.
 
 **Comparison history**

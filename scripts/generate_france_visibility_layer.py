@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Pré-calcule la visibilité du Soleil à 20:19 le 12 août 2026 depuis le relief.
+"""Pré-calcule la visibilité du Soleil en France métropolitaine.
 
-Le modèle altimétrique est Mapzen Terrarium (AWS Open Data, tuiles ~30 m à z12).
-La sortie est une image RGBA géoréférencée, transparente hors Val-d'Oise.
+Le modèle altimétrique est Mapzen Terrarium (AWS Open Data).
+La sortie est une image RGBA géoréférencée, transparente hors territoire.
 """
 from __future__ import annotations
 
