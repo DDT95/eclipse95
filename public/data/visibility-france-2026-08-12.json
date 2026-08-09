@@ -9,10 +9,15 @@
       9.55996
     ]
   ],
-  "bearing": 284.0,
-  "sunAltitude": 7.9,
+  "bearing": "calculé localement pour chaque cellule",
+  "sunAltitude": "calculée localement pour chaque cellule",
   "dateTime": "2026-08-12T20:19:00+02:00",
   "source": "Mapzen Terrarium / AWS Open Data",
-  "resolution": "MNT Terrarium généralisé ; grille nationale ~2–4 km",
-  "scope": "Aperçu national du relief uniquement ; analyse plus précise, météo et obstacles recalculés au clic"
+  "resolution": "MNT Terrarium z10 ; grille nationale ~1 km",
+  "scope": "Relief uniquement, horizon 10 km ; Soleil local à 20:19. Météo et obstacles recalculés au clic",
+  "thresholds": {
+    "red": "marge <= 0°",
+    "orange": "0° < marge < 4°",
+    "green": "marge >= 4°"
+  }
 }

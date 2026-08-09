@@ -10,6 +10,7 @@ import json
 import math
 import os
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -19,11 +20,10 @@ ROOT = Path(__file__).resolve().parents[1]
 BOUNDARY = ROOT / "public/data/france-metropolitaine.geojson"
 OUT_IMAGE = ROOT / "public/data/visibility-france-2026-08-12.png"
 OUT_META = ROOT / "public/data/visibility-france-2026-08-12.json"
-CACHE = ROOT / ".cache/terrarium-z8"
-ZOOM = 8
-BEARING = 284.0
-SUN_ALTITUDE = 7.9
-GRID_WIDTH = 250
+CACHE = ROOT / ".cache/terrarium-z10"
+ZOOM = 10
+GRID_WIDTH = 520
+OBSERVATION_UTC = datetime(2026, 8, 12, 18, 19, tzinfo=timezone.utc)
 
 
 def lonlat_to_pixel(lon: float, lat: float) -> tuple[float, float]:
@@ -67,6 +67,25 @@ def destination(lat: float, lon: float, distance_km: float, bearing: float) -> t
     return math.degrees(p2), math.degrees(l2)
 
 
+def solar_position(lat: float, lon: float) -> tuple[float, float]:
+    """Altitude et azimut solaire (degrés, azimut depuis le nord)."""
+    unix = OBSERVATION_UTC.timestamp()
+    jd = unix / 86400.0 + 2440587.5
+    n = jd - 2451545.0
+    mean_longitude = math.radians((280.460 + 0.9856474 * n) % 360)
+    mean_anomaly = math.radians((357.528 + 0.9856003 * n) % 360)
+    ecliptic_longitude = mean_longitude + math.radians(1.915) * math.sin(mean_anomaly) + math.radians(0.020) * math.sin(2 * mean_anomaly)
+    obliquity = math.radians(23.439 - 0.0000004 * n)
+    right_ascension = math.atan2(math.cos(obliquity) * math.sin(ecliptic_longitude), math.cos(ecliptic_longitude))
+    declination = math.asin(math.sin(obliquity) * math.sin(ecliptic_longitude))
+    gmst = math.radians((280.46061837 + 360.98564736629 * n) % 360)
+    hour_angle = (gmst + math.radians(lon) - right_ascension + math.pi) % (2 * math.pi) - math.pi
+    latitude = math.radians(lat)
+    altitude = math.asin(math.sin(latitude) * math.sin(declination) + math.cos(latitude) * math.cos(declination) * math.cos(hour_angle))
+    azimuth = math.atan2(-math.sin(hour_angle), math.tan(declination) * math.cos(latitude) - math.sin(latitude) * math.cos(hour_angle))
+    return math.degrees(altitude), math.degrees(azimuth) % 360
+
+
 def points_in_polygon(xs: np.ndarray, ys: np.ndarray, ring: np.ndarray) -> np.ndarray:
     inside = np.zeros(xs.shape, dtype=bool)
     xj, yj = ring[-1]
@@ -77,15 +96,12 @@ def points_in_polygon(xs: np.ndarray, ys: np.ndarray, ring: np.ndarray) -> np.nd
     return inside
 
 
-def colour(score: float) -> tuple[int, int, int, int]:
-    red = np.array([224, 49, 49], dtype=float)
-    orange = np.array([240, 140, 0], dtype=float)
-    green = np.array([47, 158, 68], dtype=float)
-    if score <= 50:
-        rgb = red + (orange - red) * (score / 50.0)
-    else:
-        rgb = orange + (green - orange) * ((score - 50.0) / 50.0)
-    return int(rgb[0]), int(rgb[1]), int(rgb[2]), 150
+def colour(clearance: float) -> tuple[int, int, int, int]:
+    if clearance <= 0:
+        return 224, 49, 49, 165
+    if clearance < 4:
+        return 240, 140, 0, 155
+    return 47, 158, 68, 140
 
 
 def main() -> None:
@@ -105,24 +121,24 @@ def main() -> None:
     for ring in rings:
         mask |= points_in_polygon(xx, yy, ring)
     rgba = np.zeros((height, GRID_WIDTH, 4), dtype=np.uint8)
-    distances = np.geomspace(0.25, 30.0, 22)
+    distances = np.asarray([0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1, 1.5, 2.5, 4, 7, 10], dtype=float)
     memory: dict = {}
 
     indices = np.argwhere(mask)
     for count, (row, col) in enumerate(indices, start=1):
         lat, lon = float(yy[row, col]), float(xx[row, col])
+        sun_altitude, bearing = solar_position(lat, lon)
         base = elevation(lon, lat, memory) + 1.7
         max_angle = -90.0
         for distance in distances:
-            sample_lat, sample_lon = destination(lat, lon, float(distance), BEARING)
+            sample_lat, sample_lon = destination(lat, lon, float(distance), bearing)
             sample_elevation = elevation(sample_lon, sample_lat, memory)
             metres = distance * 1000.0
             curvature = metres * metres / (2 * 6371000.0)
             angle = math.degrees(math.atan2(sample_elevation - base - curvature, metres))
             max_angle = max(max_angle, angle)
-        clearance = SUN_ALTITUDE - max(0.0, max_angle)
-        score = max(0.0, min(100.0, (clearance + 0.5) / 7.5 * 100.0))
-        rgba[row, col] = colour(score)
+        clearance = sun_altitude - max(0.0, max_angle)
+        rgba[row, col] = colour(clearance)
         if count % 5000 == 0:
             print(f"{count}/{len(indices)} points")
 
@@ -131,12 +147,13 @@ def main() -> None:
     large.save(OUT_IMAGE, optimize=True)
     meta = {
         "bounds": [[float(south), float(west)], [float(north), float(east)]],
-        "bearing": BEARING,
-        "sunAltitude": SUN_ALTITUDE,
+        "bearing": "calculé localement pour chaque cellule",
+        "sunAltitude": "calculée localement pour chaque cellule",
         "dateTime": "2026-08-12T20:19:00+02:00",
         "source": "Mapzen Terrarium / AWS Open Data",
-        "resolution": "MNT Terrarium généralisé ; grille nationale ~2–4 km",
-        "scope": "Aperçu national du relief uniquement ; analyse plus précise, météo et obstacles recalculés au clic"
+        "resolution": "MNT Terrarium z10 ; grille nationale ~1 km",
+        "scope": "Relief uniquement, horizon 10 km ; Soleil local à 20:19. Météo et obstacles recalculés au clic",
+        "thresholds": {"red": "marge <= 0°", "orange": "0° < marge < 4°", "green": "marge >= 4°"}
     }
     OUT_META.write_text(json.dumps(meta, ensure_ascii=False, indent=2))
     print(f"Écrit: {OUT_IMAGE} ({large.size[0]}×{large.size[1]})")

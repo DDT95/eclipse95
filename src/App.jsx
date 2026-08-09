@@ -385,10 +385,10 @@ export function App() {
           <div className="legend">
             <div className="block-title"><Mountains size={18} /><span>Visibilité du relief · 20:19</span></div>
             <label className="layer-toggle"><input type="checkbox" checked={showVisibility} onChange={e=>setShowVisibility(e.target.checked)} /><span>Afficher la surface favorable / défavorable</span></label>
-            <div><i className="green" /><span><strong>Dégagé</strong> Soleil au-dessus du relief</span></div>
-            <div><i className="orange" /><span><strong>Limite</strong> Faible marge à l’horizon</span></div>
-            <div><i className="red" /><span><strong>Masqué</strong> Relief devant le Soleil</span></div>
-            <small>Cette vue nationale est une lecture généralisée du relief. Au clic, le relief et la météo sont recalculés précisément pour le lieu choisi.</small>
+            <div><i className="green" /><span><strong>Dégagé</strong> Marge de relief d’au moins 4°</span></div>
+            <div><i className="orange" /><span><strong>Limite</strong> Marge comprise entre 0° et 4°</span></div>
+            <div><i className="red" /><span><strong>Masqué</strong> Soleil sous le relief à 20:19</span></div>
+            <small>Couche de relief uniquement, calculée avec le Soleil local et un horizon de 10 km. Le clic recalcule le profil et ajoute la météo au score.</small>
           </div>
         </aside>
 
@@ -405,7 +405,7 @@ export function App() {
           </MapContainer>
           <form onSubmit={onSearch} className="mobile-search"><MagnifyingGlass size={19}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Rechercher un lieu" aria-label="Rechercher un lieu"/><button aria-label="Lancer la recherche"><ArrowRight size={18}/></button></form>
           <div className="map-instruction"><MapPin size={18} weight="fill" /><span><strong>Touchez la carte</strong> pour analyser ce lieu</span></div>
-          <div className="surface-chip"><Mountains size={18}/><span>Couleur initiale = <strong>relief uniquement</strong></span></div>
+          <div className="surface-chip"><Mountains size={18}/><span><strong>Relief à 20:19</strong> · score complet au clic</span></div>
           <div className="direction-chip"><Compass size={20} /><span><strong>{Math.round(solar.azimuth)}°</strong> · ouest-nord-ouest</span><b>{time}</b></div>
         </section>
 
