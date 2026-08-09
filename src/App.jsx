@@ -71,6 +71,29 @@ function distanceMetres(a, b) {
   return Math.hypot(dx, dy);
 }
 
+function bearingBetween(a, b) {
+  const p1 = a.lat * Math.PI / 180, p2 = b.lat * Math.PI / 180;
+  const dl = (b.lng - a.lng) * Math.PI / 180;
+  const y = Math.sin(dl) * Math.cos(p2);
+  const x = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+function angleDifference(a, b) {
+  return Math.abs(((a - b + 540) % 360) - 180);
+}
+
+function geometryCenter(geometry) {
+  const points = [];
+  const collect = value => {
+    if (Array.isArray(value) && typeof value[0] === 'number' && typeof value[1] === 'number') points.push(value);
+    else if (Array.isArray(value)) value.forEach(collect);
+  };
+  collect(geometry?.coordinates);
+  if (!points.length) return null;
+  return { lng: points.reduce((sum,p) => sum + p[0], 0) / points.length, lat: points.reduce((sum,p) => sum + p[1], 0) / points.length };
+}
+
 function ClickHandler({ onPick }) {
   useMapEvents({ click: (event) => onPick(event.latlng) });
   return null;
@@ -218,10 +241,29 @@ async function fetchSiteAudit(point, bearing) {
     }
     throw new Error('Overpass indisponible');
   };
-  const data = await fetchOverpass(query);
+  const fetchIgnBuildings = async () => {
+    const latDelta = 0.0032;
+    const lngDelta = latDelta / Math.max(.45, Math.cos(point.lat * Math.PI / 180));
+    const url = new URL('https://data.geopf.fr/wfs/ows');
+    url.search = new URLSearchParams({
+      service:'WFS', version:'2.0.0', request:'GetFeature', typeNames:'BDTOPO_V3:batiment',
+      srsName:'EPSG:4326', outputFormat:'application/json', count:'800',
+      bbox:`${point.lng-lngDelta},${point.lat-latDelta},${point.lng+lngDelta},${point.lat+latDelta},EPSG:4326`
+    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 14000);
+    try {
+      const response = await fetch(url, {signal:controller.signal});
+      if (!response.ok) throw new Error('BD TOPO indisponible');
+      return await response.json();
+    } finally { clearTimeout(timer); }
+  };
+  const [osmResult, ignResult] = await Promise.allSettled([fetchOverpass(query), fetchIgnBuildings()]);
+  if (osmResult.status === 'rejected' && ignResult.status === 'rejected') throw new Error('Contrôle du bâti indisponible');
+  const data = osmResult.status === 'fulfilled' ? osmResult.value : {elements:[]};
   const elements = data.elements || [];
   const onWater = elements.some(el => el.tags?.natural === 'water' || el.tags?.waterway || el.tags?.landuse === 'reservoir');
-  const inBuilding = elements.some(el => el.tags?.building && (() => { const p=el.center?{lat:el.center.lat,lng:el.center.lon}:null; return !p || distanceMetres(point,p)<15; })());
+  const osmInBuilding = elements.some(el => el.tags?.building && (() => { const p=el.center?{lat:el.center.lat,lng:el.center.lon}:null; return !p || distanceMetres(point,p)<15; })());
   const privateNearby = elements.some(el => el.tags?.access === 'private');
   const hasRoad = elements.some(el => el.tags?.highway && !['motorway','trunk'].includes(el.tags.highway));
   const hasParking = elements.some(el => el.tags?.amenity === 'parking');
@@ -230,12 +272,38 @@ async function fetchSiteAudit(point, bearing) {
     const p = el.center ? {lat:el.center.lat,lng:el.center.lon} : (el.lat ? {lat:el.lat,lng:el.lon} : null);
     if (!p) return null;
     const distance = Math.max(15, distanceMetres(point,p));
-    const height = el.tags?.building ? Math.max(6, Number(el.tags['building:levels'] || 2) * 3) : 15;
-    return { kind:el.tags?.building ? 'Bâtiment' : 'Végétation haute', distance, height, angle:Math.atan2(height - 1.7,distance) * 180 / Math.PI };
-  }).filter(Boolean).filter(o => o.distance <= 1650);
+    const explicitHeight = Number.parseFloat(el.tags?.height);
+    const levels = Number.parseFloat(el.tags?.['building:levels']);
+    const roofLevels = Number.parseFloat(el.tags?.['roof:levels']);
+    const height = el.tags?.building ? Math.max(5, Number.isFinite(explicitHeight) ? explicitHeight : (Number.isFinite(levels) ? levels * 3 + (Number.isFinite(roofLevels) ? roofLevels * 1.5 : 0) : 7)) : 15;
+    const inAxis = angleDifference(bearing, bearingBetween(point,p)) <= Math.max(4, Math.atan2(35,distance) * 180 / Math.PI);
+    return { kind:el.tags?.building ? 'Bâtiment OSM' : 'Végétation haute', source:'OpenStreetMap', distance, height, inAxis, angle:Math.atan2(height - 1.7,distance) * 180 / Math.PI };
+  }).filter(Boolean).filter(o => o.distance <= 1650 && o.inAxis);
+  const ignBuildings = ignResult.status === 'fulfilled' ? (ignResult.value.features || []).map(feature => {
+    const p = geometryCenter(feature.geometry);
+    if (!p) return null;
+    const distance = Math.max(8, distanceMetres(point,p));
+    const props = feature.properties || {};
+    const heightValue = Number(props.hauteur);
+    const roof = Number(props.altitude_maximale_toit ?? props.altitude_minimale_toit);
+    const ground = Number(props.altitude_minimale_sol ?? props.altitude_maximale_sol);
+    const floors = Number(props.nombre_d_etages);
+    const measured = Number.isFinite(heightValue) && heightValue > 1 ? heightValue : (Number.isFinite(roof) && Number.isFinite(ground) && roof > ground ? roof-ground : null);
+    const height = measured || (Number.isFinite(floors) && floors >= 0 ? Math.max(4.5,(floors+1)*3) : 7);
+    const inAxis = angleDifference(bearing, bearingBetween(point,p)) <= Math.max(4, Math.atan2(35,distance) * 180 / Math.PI);
+    return {kind:'Bâtiment BD TOPO', source:'IGN BD TOPO', distance, height, measured:Boolean(measured), inAxis, angle:Math.atan2(height-1.7,distance)*180/Math.PI};
+  }).filter(Boolean).filter(o => o.distance <= 700) : [];
+  const axisBuildings = ignBuildings.filter(o => o.inAxis && o.distance > 10);
+  obstacles.push(...axisBuildings);
   const maxObstacle = obstacles.sort((a,b) => b.angle-a.angle)[0] || null;
+  const nearbyIgnBuildings = ignBuildings.filter(o => o.distance <= 180);
+  const nearbyOsmBuildings = elements.filter(el => el.tags?.building && el.center && distanceMetres(point,{lat:el.center.lat,lng:el.center.lon}) <= 180).length;
+  const nearbyBuildingCount = ignResult.status === 'fulfilled' ? nearbyIgnBuildings.length : nearbyOsmBuildings;
+  const inBuilding = osmInBuilding || ignBuildings.some(o => o.distance < 12);
+  const urbanPenalty = nearbyBuildingCount ? Math.min(18, 4 + Math.round(Math.sqrt(nearbyBuildingCount) * 2.2)) : 0;
+  const buildingScore = Math.max(0, 100 - urbanPenalty - (maxObstacle?.kind?.includes('Bâtiment') ? Math.min(65, Math.round(maxObstacle.angle * 5)) : 0));
   const accessScore = Math.min(100, 35 + (hasRoad?30:0) + (hasParking?20:0) + (hasTransit?15:0));
-  return { onWater, inBuilding, privateNearby, excluded:onWater||inBuilding, hasRoad, hasParking, hasTransit, obstacles, maxObstacle, score:accessScore, timestamp:data.osm3s?.timestamp_osm_base };
+  return { onWater, inBuilding, privateNearby, excluded:onWater||inBuilding, hasRoad, hasParking, hasTransit, obstacles, maxObstacle, nearbyBuildingCount, urbanPenalty, buildingScore, buildingSource:ignResult.status === 'fulfilled' ? 'IGN BD TOPO' : 'OpenStreetMap', score:accessScore, timestamp:data.osm3s?.timestamp_osm_base };
 }
 
 async function reversePlace(point) {
@@ -267,6 +335,7 @@ export function App() {
   const [recenterKey, setRecenterKey] = useState(0);
   const [franceKey, setFranceKey] = useState(0);
   const [safetyOpen, setSafetyOpen] = useState(true);
+  const [locating, setLocating] = useState(false);
 
   useEffect(() => { fetch(`${PUBLIC_BASE}data/france-metropolitaine.geojson`).then(r => r.json()).then(setBoundary); }, []);
   const solar = useMemo(() => solarAt(point, time), [point, time]);
@@ -310,13 +379,14 @@ export function App() {
   else if (!weather) total = Math.min(total,69);
   else if (clearance < 2) total = Math.min(total,44);
   else if (clearance < 4) total = Math.min(total,74);
+  if (siteAudit?.urbanPenalty) total = Math.max(0, total - siteAudit.urbanPenalty);
   const color = scoreColor(total);
   const isComplete = Boolean(horizon && weather);
   const decisiveTerrainBlock = terrainBlockedNow || terrainBlockedAtMaximum;
   const availableDataFavorable = Boolean(horizon && weather && horizonScore >= 75 && weatherScore >= 75 && !siteAudit?.excluded && !decisiveTerrainBlock);
   const displayColor = decisiveTerrainBlock ? '#e03131' : !loading && !isComplete ? '#f08c00' : color;
   const resultLabel = terrainBlockedNow ? `Défavorable — Soleil masqué à ${time}` : terrainBlockedAtMaximum ? 'Défavorable au maximum de 20:19' : siteAudit?.onWater ? 'Point situé sur l’eau' : siteAudit?.inBuilding ? 'Bâtiment à moins de 5 m' : isComplete ? scoreLabel(total) : availableDataFavorable ? 'Favorable selon les données disponibles' : 'Estimation partielle';
-  const resultExplanation = terrainBlockedNow ? `Le relief dépasse le Soleil de ${Math.abs(clearance).toFixed(1)}°.` : terrainBlockedAtMaximum ? (time === '20:19' ? `Le relief dépasse le Soleil de ${Math.abs(maximumClearance).toFixed(1)}°.` : `À ${time}, le Soleil est plus haut ; il passe derrière le relief vers 20:19.`) : isComplete ? 'Score : relief 60 % · météo 30 % · heure 10 %.' : 'Pourcentage estimé avec les composantes disponibles.';
+  const resultExplanation = terrainBlockedNow ? `Le relief ou le bâti dépasse le Soleil de ${Math.abs(clearance).toFixed(1)}°.` : terrainBlockedAtMaximum ? (time === '20:19' ? `Le relief dépasse le Soleil de ${Math.abs(maximumClearance).toFixed(1)}°.` : `À ${time}, le Soleil est plus haut ; il passe derrière le relief vers 20:19.`) : isComplete ? `Score : relief 60 % · météo 30 % · heure 10 %${siteAudit?.urbanPenalty ? ` · contexte urbain −${siteAudit.urbanPenalty}` : ''}.` : 'Pourcentage estimé avec les composantes disponibles.';
 
   const onSearch = async (event) => {
     event.preventDefault();
@@ -340,6 +410,19 @@ export function App() {
     setSiteAudit(null);
     setPoint(DEFAULT_POINT);
     setFranceKey(key => key + 1);
+  };
+
+  const locateUser = () => {
+    if (!navigator.geolocation) { setError('La géolocalisation n’est pas disponible sur cet appareil.'); return; }
+    setLocating(true); setError('');
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        setPoint({lat:position.coords.latitude,lng:position.coords.longitude});
+        setHasSelection(true); setPanelOpen(true); setRecenterKey(key=>key+1); setLocating(false);
+      },
+      () => { setError('Position non accessible. Autorisez la localisation puis réessayez.'); setLocating(false); },
+      {enableHighAccuracy:true,timeout:12000,maximumAge:60000}
+    );
   };
 
   return (
@@ -372,7 +455,7 @@ export function App() {
             <label htmlFor="place-search">Adresse ou commune</label>
             <div><MagnifyingGlass size={18} /><input id="place-search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Commune ou adresse" /><button aria-label="Rechercher"><ArrowRight size={18} /></button></div>
           </form>
-          <div className="quick-actions"><button onClick={() => { setPanelOpen(false); setHasSelection(false); setFranceKey(key=>key+1); }}>France entière</button><button onClick={() => navigator.geolocation?.getCurrentPosition(p => { setPoint({lat:p.coords.latitude,lng:p.coords.longitude}); setHasSelection(true); setPanelOpen(true); setRecenterKey(key=>key+1); })}><Crosshair size={18} /> Me localiser</button></div>
+          <div className="quick-actions"><button onClick={() => { setPanelOpen(false); setHasSelection(false); setFranceKey(key=>key+1); }}>France entière</button><button onClick={locateUser} disabled={locating}><Crosshair size={18} className={locating?'locating-icon':''} /> {locating?'Localisation…':'Me localiser'}</button></div>
 
           <div className="control-block">
             <div className="block-title"><CalendarBlank size={18} /><span>Heure d’observation</span><strong>{time}</strong></div>
@@ -403,7 +486,7 @@ export function App() {
             <FranceView boundary={boundary} recenterKey={franceKey} />
             <MapUpdater point={point} recenterKey={recenterKey} />
           </MapContainer>
-          <form onSubmit={onSearch} className="mobile-search"><MagnifyingGlass size={19}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Rechercher un lieu" aria-label="Rechercher un lieu"/><button aria-label="Lancer la recherche"><ArrowRight size={18}/></button></form>
+          <form onSubmit={onSearch} className="mobile-search"><MagnifyingGlass size={19}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Rechercher un lieu" aria-label="Rechercher un lieu"/><button type="button" className="locate-button" onClick={locateUser} disabled={locating} aria-label={locating?'Localisation en cours':'Je suis ici'} title="Je suis ici"><Crosshair size={19} className={locating?'locating-icon':''}/></button><button className="search-submit" aria-label="Lancer la recherche"><ArrowRight size={18}/></button></form>
           <div className="map-instruction"><MapPin size={18} weight="fill" /><span><strong>Touchez la carte</strong> pour analyser ce lieu</span></div>
           <div className="surface-chip"><Mountains size={18}/><span><strong>Relief à 20:19</strong> · score complet au clic</span></div>
           <div className="direction-chip"><Compass size={20} /><span><strong>{Math.round(solar.azimuth)}°</strong> · ouest-nord-ouest</span><b>{time}</b></div>
@@ -421,7 +504,7 @@ export function App() {
           <div className="mobile-factor-summary">
             <div><Mountains size={23}/><span>Marge d’horizon</span><strong>{horizon ? `${clearance.toFixed(1)}°` : '…'}</strong></div>
             <div><CloudSun size={23}/><span>Météo prévue</span><strong>{weather ? `${weatherScore}%` : '…'}</strong></div>
-            <div><CalendarBlank size={23}/><span>Heure optimale</span><strong>20:19</strong></div>
+            <div><Buildings size={23}/><span>Environnement bâti</span><strong>{siteAudit ? `${siteAudit.buildingScore}%` : '…'}</strong></div>
           </div>
           <button className="new-search" onClick={resetSearch}><MagnifyingGlass size={18}/> Nouvelle recherche</button>
           <div className="section-kicker">LIEU SÉLECTIONNÉ</div>
@@ -449,17 +532,18 @@ export function App() {
 
           <section className="detail-section factors">
             <div className="factor-row"><CloudSun size={22} color={scoreColor(weatherScore)} /><div><strong>Météo · {weatherScore}/100</strong><p>{weather ? `${weather.cloud}% de nuages · pluie ${weather.rain}% · vent ${weather.wind} km/h` : 'Prévision momentanément indisponible'}</p></div></div>
+            <div className="factor-row"><Buildings size={22} color={scoreColor(siteAudit?.buildingScore ?? 50)} /><div><strong>Bâti · {siteAudit ? `${siteAudit.buildingScore}/100` : 'analyse…'}</strong><p>{siteAudit ? (siteAudit.nearbyBuildingCount ? `${siteAudit.nearbyBuildingCount} bâtiments dans un rayon de 180 m · pénalité urbaine −${siteAudit.urbanPenalty} points.` : 'Aucun environnement bâti dense détecté à proximité.') : 'Hauteurs du bâti momentanément indisponibles.'}</p></div></div>
           </section>
 
           {siteAudit && <section className="detail-section ground-audit">
-            <div className="section-row"><h3>Contrôle du lieu et de l’axe</h3><span>OpenStreetMap</span></div>
+            <div className="section-row"><h3>Contrôle du lieu et de l’axe</h3><span>{siteAudit.buildingSource}</span></div>
             <div className={siteAudit?.onWater ? 'audit-row danger' : 'audit-row ok'}><Waves size={18}/><span>Point sur l’eau</span><strong>{siteAudit ? (siteAudit.onWater ? 'Oui' : 'Non') : '…'}</strong></div>
             <div className={siteAudit?.inBuilding ? 'audit-row danger' : 'audit-row ok'}><Buildings size={18}/><span>Bâtiment à moins de 5 m</span><strong>{siteAudit ? (siteAudit.inBuilding ? 'Oui' : 'Non') : '…'}</strong></div>
             <div className={siteAudit?.privateNearby ? 'audit-row warn' : 'audit-row ok'}><Info size={18}/><span>Accès privé éventuellement à proximité</span><strong>{siteAudit ? (siteAudit.privateNearby ? 'À vérifier' : 'Non signalé') : '…'}</strong></div>
-            <div className={siteAudit?.maxObstacle ? 'audit-row warn' : 'audit-row ok'}><Tree size={18}/><span>Obstacle détecté dans l’axe</span><strong>{siteAudit?.maxObstacle ? `${siteAudit.maxObstacle.kind} · ${Math.round(siteAudit.maxObstacle.distance)} m` : siteAudit ? 'Aucun' : '…'}</strong></div>
+            <div className={siteAudit?.maxObstacle ? 'audit-row warn' : 'audit-row ok'}><Tree size={18}/><span>Obstacle détecté dans l’axe</span><strong>{siteAudit?.maxObstacle ? `${siteAudit.maxObstacle.kind} · ${siteAudit.maxObstacle.height.toFixed(1)} m · ${Math.round(siteAudit.maxObstacle.distance)} m` : siteAudit ? 'Aucun' : '…'}</strong></div>
           </section>}
 
-          <div className="method-note"><Info size={18} /><p><strong>Le pourcentage est une aide à la décision.</strong> Il combine relief, météo et heure. Vérifiez toujours les conditions réelles sur place et respectez les accès autorisés.</p></div>
+          <div className="method-note"><Info size={18} /><p><strong>Le pourcentage est une aide à la décision.</strong> Il combine relief, hauteur du bâti, densité urbaine, météo et heure. Vérifiez toujours les conditions réelles sur place et respectez les accès autorisés.</p></div>
           <div className="route-actions" aria-label="Préparer l’itinéraire">
             <a className="route-button" href={`https://www.google.com/maps/dir/?api=1&destination=${point.lat},${point.lng}`} target="_blank" rel="noreferrer"><Car size={19} /> Google Maps</a>
             <a className="route-button route-button-secondary" href={`https://maps.apple.com/?daddr=${point.lat},${point.lng}&dirflg=d`} target="_blank" rel="noreferrer"><MapPin size={19} /> Plans Apple</a>
@@ -470,7 +554,7 @@ export function App() {
         </aside>}
         {hasSelection && !panelOpen && <button className="reopen" onClick={() => setPanelOpen(true)}>Voir le résultat <ArrowRight size={18}/></button>}
       </main>
-      <footer><span><GlobeHemisphereWest size={14}/> CartoKob</span><span>Données : Open-Meteo · Base Adresse Nationale · OpenStreetMap · Mapzen</span></footer>
+      <footer><span><GlobeHemisphereWest size={14}/> CartoKob</span><span>Données : IGN BD TOPO · Open-Meteo · Base Adresse Nationale · OpenStreetMap · Mapzen</span></footer>
     </div>
   );
 }
