@@ -282,8 +282,8 @@ async function fetchSiteAudit(point, bearing) {
   const elements = data.elements || [];
   const onWater = elements.some(el => el.tags?.natural === 'water' || el.tags?.waterway || el.tags?.landuse === 'reservoir');
   const ignVegetation = vegetationResult.status === 'fulfilled' ? vegetationResult.value : [];
-  const forestNatures = ['Bois','Forêt fermée','Forêt ouverte','Peupleraie'];
-  const forestNearby = elements.some(el => el.tags?.natural === 'wood' || el.tags?.landuse === 'forest') || ignVegetation[0]?.natures?.some(n=>forestNatures.includes(n));
+  const isForestNature = nature => nature === 'Bois' || nature === 'Peupleraie' || nature?.startsWith('Forêt');
+  const forestNearby = elements.some(el => el.tags?.natural === 'wood' || el.tags?.landuse === 'forest') || ignVegetation[0]?.natures?.some(isForestNature);
   const treesNearby = elements.filter(el => el.tags?.natural === 'tree' || el.tags?.barrier === 'hedge').length;
   const osmInBuilding = elements.some(el => el.tags?.building && (() => { const p=el.center?{lat:el.center.lat,lng:el.center.lon}:null; return !p || distanceMetres(point,p)<15; })());
   const privateNearby = elements.some(el => el.tags?.access === 'private');
@@ -317,9 +317,9 @@ async function fetchSiteAudit(point, bearing) {
   }).filter(Boolean).filter(o => o.distance <= 700) : [];
   const axisBuildings = ignBuildings.filter(o => o.inAxis && o.distance > 10);
   obstacles.push(...axisBuildings);
-  const vegetationHeights = {'Bois':15,'Forêt fermée':15,'Forêt ouverte':12,'Peupleraie':18,'Haie':5,'Lande ligneuse':3,'Verger':6};
+  const vegetationHeight = nature => nature === 'Peupleraie' ? 18 : isForestNature(nature) ? 15 : nature === 'Haie' ? 5 : nature === 'Lande ligneuse' ? 3 : nature === 'Verger' ? 6 : 2;
   ignVegetation.slice(1).forEach(sample => sample.natures.forEach(nature => {
-    const height = vegetationHeights[nature] || 2;
+    const height = vegetationHeight(nature);
     obstacles.push({kind:`Végétation IGN · ${nature}`,source:'IGN BD TOPO',distance:Math.max(12,sample.distance),height,angle:Math.atan2(height-1.7,Math.max(12,sample.distance))*180/Math.PI});
   }));
   const maxObstacle = obstacles.sort((a,b) => b.angle-a.angle)[0] || null;
