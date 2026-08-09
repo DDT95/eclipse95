@@ -13,6 +13,7 @@ import 'leaflet/dist/leaflet.css';
 
 const ECLIPSE_DATE = '2026-08-12';
 const PUBLIC_BASE = import.meta.env.BASE_URL;
+const IS_DDT_BUILD = import.meta.env.IS_DDT_BUILD;
 const DEFAULT_POINT = { lat: 46.6034, lng: 1.8883 };
 const MAXIMUM_MINUTE = 20 * 60 + 19;
 
@@ -454,10 +455,15 @@ export function App() {
   };
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${IS_DDT_BUILD ? 'ddt-build' : 'cartokob-build'}`}>
       <header className="masthead">
-        <a className="brand" href={PUBLIC_BASE} aria-label="CartoKob, accueil"><GlobeHemisphereWest size={29} weight="regular" /><strong>CartoKob</strong></a>
-        <div className="event-title"><strong>Où voir l’éclipse ?</strong><span>12 août 2026</span></div>
+        {IS_DDT_BUILD ? <div className="brand ddt-brand">
+          <img src={`${PUBLIC_BASE}assets/prefet-val-doise.svg`} alt="Préfet du Val-d’Oise" />
+          <span><small>ATLAS TERRITORIAL · VAL-D’OISE</small><strong>Où voir l’éclipse ?</strong><em>Éclipse solaire · mercredi 12 août 2026</em></span>
+        </div> : <>
+          <a className="brand" href={PUBLIC_BASE} aria-label="CartoKob, accueil"><GlobeHemisphereWest size={29} weight="regular" /><strong>CartoKob</strong></a>
+          <div className="event-title"><strong>Où voir l’éclipse ?</strong><span>12 août 2026</span></div>
+        </>}
         <div className="event-summary"><Sun size={20} weight="fill" /><span><strong>Maximum vers 20:19</strong><small>Soleil bas · direction 284°</small></span></div>
         <nav><button onClick={() => setSafetyOpen(true)} aria-label="Informations et sécurité"><Info size={22}/><span>Précautions</span></button></nav>
       </header>
@@ -583,7 +589,7 @@ export function App() {
         </aside>}
         {hasSelection && !panelOpen && <button className="reopen" onClick={() => setPanelOpen(true)}>Voir le résultat <ArrowRight size={18}/></button>}
       </main>
-      <footer><span><GlobeHemisphereWest size={14}/> CartoKob</span><span>Données : IGN BD TOPO · Open-Meteo · Base Adresse Nationale · OpenStreetMap · Mapzen</span></footer>
+      <footer><span>{IS_DDT_BUILD ? 'DDT 95 · Pôle géomatique' : <><GlobeHemisphereWest size={14}/> CartoKob</>}</span><span>Données : IGN BD TOPO · Open-Meteo · Base Adresse Nationale · OpenStreetMap · Mapzen</span></footer>
     </div>
   );
 }
