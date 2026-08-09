@@ -221,6 +221,10 @@ async function fetchSiteAudit(point, bearing) {
     wr(around:8,${point.lat},${point.lng})[waterway];
     wr(around:8,${point.lat},${point.lng})[landuse=reservoir];
     wr(around:12,${point.lat},${point.lng})[access=private];
+    wr(around:35,${point.lat},${point.lng})[natural=wood];
+    wr(around:35,${point.lat},${point.lng})[landuse=forest];
+    nwr(around:120,${point.lat},${point.lng})[natural=tree];
+    way(around:120,${point.lat},${point.lng})[barrier=hedge];
     way(around:35,${point.lat},${point.lng})[highway];
     nwr(around:500,${point.lat},${point.lng})[amenity=parking];
     wr(${south},${west},${north},${east})[building];
@@ -263,6 +267,8 @@ async function fetchSiteAudit(point, bearing) {
   const data = osmResult.status === 'fulfilled' ? osmResult.value : {elements:[]};
   const elements = data.elements || [];
   const onWater = elements.some(el => el.tags?.natural === 'water' || el.tags?.waterway || el.tags?.landuse === 'reservoir');
+  const forestNearby = elements.some(el => el.tags?.natural === 'wood' || el.tags?.landuse === 'forest');
+  const treesNearby = elements.filter(el => el.tags?.natural === 'tree' || el.tags?.barrier === 'hedge').length;
   const osmInBuilding = elements.some(el => el.tags?.building && (() => { const p=el.center?{lat:el.center.lat,lng:el.center.lon}:null; return !p || distanceMetres(point,p)<15; })());
   const privateNearby = elements.some(el => el.tags?.access === 'private');
   const hasRoad = elements.some(el => el.tags?.highway && !['motorway','trunk'].includes(el.tags.highway));
@@ -303,7 +309,7 @@ async function fetchSiteAudit(point, bearing) {
   const urbanPenalty = nearbyBuildingCount ? Math.min(18, 4 + Math.round(Math.sqrt(nearbyBuildingCount) * 2.2)) : 0;
   const buildingScore = Math.max(0, 100 - urbanPenalty - (maxObstacle?.kind?.includes('Bâtiment') ? Math.min(65, Math.round(maxObstacle.angle * 5)) : 0));
   const accessScore = Math.min(100, 35 + (hasRoad?30:0) + (hasParking?20:0) + (hasTransit?15:0));
-  return { onWater, inBuilding, privateNearby, excluded:onWater||inBuilding, hasRoad, hasParking, hasTransit, obstacles, maxObstacle, nearbyBuildingCount, urbanPenalty, buildingScore, buildingSource:ignResult.status === 'fulfilled' ? 'IGN BD TOPO' : 'OpenStreetMap', score:accessScore, timestamp:data.osm3s?.timestamp_osm_base };
+  return { onWater, inBuilding, forestNearby, treesNearby, privateNearby, excluded:onWater||inBuilding, hasRoad, hasParking, hasTransit, obstacles, maxObstacle, nearbyBuildingCount, urbanPenalty, buildingScore, buildingSource:ignResult.status === 'fulfilled' ? 'IGN BD TOPO' : 'OpenStreetMap', score:accessScore, timestamp:data.osm3s?.timestamp_osm_base };
 }
 
 async function reversePlace(point) {
@@ -375,6 +381,7 @@ export function App() {
   const confidence = (horizon?60:0) + (weather?30:0) + 10;
   let total = Math.round((horizonScore * .60 + weatherScore * .30 + timeScore * .10));
   if (siteAudit?.excluded) total = 0;
+  else if (siteAudit?.forestNearby) total = Math.min(total, 30);
   else if (!horizon) total = Math.min(total,44);
   else if (!weather) total = Math.min(total,69);
   else if (clearance < 2) total = Math.min(total,44);
@@ -385,7 +392,7 @@ export function App() {
   const decisiveTerrainBlock = terrainBlockedNow || terrainBlockedAtMaximum;
   const availableDataFavorable = Boolean(horizon && weather && horizonScore >= 75 && weatherScore >= 75 && !siteAudit?.excluded && !decisiveTerrainBlock);
   const displayColor = decisiveTerrainBlock ? '#e03131' : !loading && !isComplete ? '#f08c00' : color;
-  const resultLabel = terrainBlockedNow ? `Défavorable — Soleil masqué à ${time}` : terrainBlockedAtMaximum ? 'Défavorable au maximum de 20:19' : siteAudit?.onWater ? 'Point situé sur l’eau' : siteAudit?.inBuilding ? 'Bâtiment à moins de 5 m' : isComplete ? scoreLabel(total) : availableDataFavorable ? 'Favorable selon les données disponibles' : 'Estimation partielle';
+  const resultLabel = terrainBlockedNow ? `Défavorable — Soleil masqué à ${time}` : terrainBlockedAtMaximum ? 'Défavorable au maximum de 20:19' : siteAudit?.onWater ? 'Point situé sur l’eau' : siteAudit?.inBuilding ? 'Bâtiment à moins de 5 m' : siteAudit?.forestNearby ? 'Défavorable — couvert forestier' : isComplete ? scoreLabel(total) : availableDataFavorable ? 'Favorable selon les données disponibles' : 'Estimation partielle';
   const resultExplanation = terrainBlockedNow ? `Le relief ou le bâti dépasse le Soleil de ${Math.abs(clearance).toFixed(1)}°.` : terrainBlockedAtMaximum ? (time === '20:19' ? `Le relief dépasse le Soleil de ${Math.abs(maximumClearance).toFixed(1)}°.` : `À ${time}, le Soleil est plus haut ; il passe derrière le relief vers 20:19.`) : isComplete ? `Score : relief 60 % · météo 30 % · heure 10 %${siteAudit?.urbanPenalty ? ` · contexte urbain −${siteAudit.urbanPenalty}` : ''}.` : 'Pourcentage estimé avec les composantes disponibles.';
 
   const onSearch = async (event) => {
@@ -539,6 +546,7 @@ export function App() {
             <div className="section-row"><h3>Contrôle du lieu et de l’axe</h3><span>{siteAudit.buildingSource}</span></div>
             <div className={siteAudit?.onWater ? 'audit-row danger' : 'audit-row ok'}><Waves size={18}/><span>Point sur l’eau</span><strong>{siteAudit ? (siteAudit.onWater ? 'Oui' : 'Non') : '…'}</strong></div>
             <div className={siteAudit?.inBuilding ? 'audit-row danger' : 'audit-row ok'}><Buildings size={18}/><span>Bâtiment à moins de 5 m</span><strong>{siteAudit ? (siteAudit.inBuilding ? 'Oui' : 'Non') : '…'}</strong></div>
+            <div className={siteAudit?.forestNearby ? 'audit-row danger' : 'audit-row ok'}><Tree size={18}/><span>Couvert forestier autour du point</span><strong>{siteAudit.forestNearby ? 'Oui · score plafonné' : siteAudit.treesNearby ? `${siteAudit.treesNearby} arbres ou haies proches` : 'Non signalé'}</strong></div>
             <div className={siteAudit?.privateNearby ? 'audit-row warn' : 'audit-row ok'}><Info size={18}/><span>Accès privé éventuellement à proximité</span><strong>{siteAudit ? (siteAudit.privateNearby ? 'À vérifier' : 'Non signalé') : '…'}</strong></div>
             <div className={siteAudit?.maxObstacle ? 'audit-row warn' : 'audit-row ok'}><Tree size={18}/><span>Obstacle détecté dans l’axe</span><strong>{siteAudit?.maxObstacle ? `${siteAudit.maxObstacle.kind} · ${siteAudit.maxObstacle.height.toFixed(1)} m · ${Math.round(siteAudit.maxObstacle.distance)} m` : siteAudit ? 'Aucun' : '…'}</strong></div>
           </section>}
