@@ -104,7 +104,20 @@ function FranceView({ boundary, recenterKey }) {
   const map = useMap();
   useEffect(() => {
     if (!boundary) return;
-    map.fitBounds(L.geoJSON(boundary).getBounds(), { padding: [24, 24], maxZoom: 6, animate: Boolean(recenterKey) });
+    const bounds = L.geoJSON(boundary).getBounds();
+    const fitFrance = () => {
+      map.invalidateSize({ animate: false });
+      map.fitBounds(bounds, {
+        paddingTopLeft: [28, 28],
+        paddingBottomRight: [28, 42],
+        maxZoom: 6,
+        animate: Boolean(recenterKey)
+      });
+    };
+    fitFrance();
+    const frame = requestAnimationFrame(fitFrance);
+    map.on('resize', fitFrance);
+    return () => { cancelAnimationFrame(frame); map.off('resize', fitFrance); };
   }, [map, boundary, recenterKey]);
   return null;
 }
@@ -362,6 +375,10 @@ export function App() {
   const [showVisibility, setShowVisibility] = useState(true);
   const [recenterKey, setRecenterKey] = useState(0);
   const [franceKey, setFranceKey] = useState(0);
+
+  useEffect(() => {
+    document.title = IS_DDT_BUILD ? 'Où voir l’éclipse ? · Atlas territorial' : 'Où voir l’éclipse ? · CartoKob';
+  }, []);
   const [safetyOpen, setSafetyOpen] = useState(true);
   const [locating, setLocating] = useState(false);
 
