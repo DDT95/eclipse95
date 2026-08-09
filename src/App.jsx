@@ -456,7 +456,7 @@ export function App() {
   return (
     <div className="app-shell">
       <header className="masthead">
-        <a className="brand" href="/" aria-label="CartoKob, accueil"><GlobeHemisphereWest size={29} weight="regular" /><strong>CartoKob</strong></a>
+        <a className="brand" href={PUBLIC_BASE} aria-label="CartoKob, accueil"><GlobeHemisphereWest size={29} weight="regular" /><strong>CartoKob</strong></a>
         <div className="event-title"><strong>Où voir l’éclipse ?</strong><span>12 août 2026</span></div>
         <div className="event-summary"><Sun size={20} weight="fill" /><span><strong>Maximum vers 20:19</strong><small>Soleil bas · direction 284°</small></span></div>
         <nav><button onClick={() => setSafetyOpen(true)} aria-label="Informations et sécurité"><Info size={22}/><span>Précautions</span></button></nav>
