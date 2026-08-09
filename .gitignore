@@ -1,0 +1,13 @@
+node_modules/
+dist/
+dist-github/
+.cache/
+.wrangler/
+.DS_Store
+
+# Captures locales de conception et de QA
+/atlas-ref-*.png
+/butry-map.png
+/implementation-*.png
+/design-qa-*.png
+/reference-eclipsemap.png
